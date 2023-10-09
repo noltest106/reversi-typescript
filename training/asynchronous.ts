@@ -1,13 +1,11 @@
 import fs from 'fs'
+import util from 'util'
 
-function main() {
-  let fileContent: string  = 'Not loaded'
+const promisifyReadFile = util.promisify(fs.readFile)
 
-  fs.readFile('package.json', (err, data) => {
-    fileContent = data.toString()
-    console.log(fileContent)
-  })
-
+async function main() {
+  const data =  await promisifyReadFile('package.json')
+  const fileContent = data.toString()
   console.log(fileContent)
 } 
 
