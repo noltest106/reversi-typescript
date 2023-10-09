@@ -1,11 +1,5 @@
 class Fraction {
-  private _numerator: number
-  private _denominator: number
-
-  constructor(numerator: number, denominator: number) {
-    this._numerator = numerator
-    this._denominator = denominator
-  }
+  constructor(private _numerator: number, private _denominator: number) {}
 
   get numerator() {
     return this._numerator
