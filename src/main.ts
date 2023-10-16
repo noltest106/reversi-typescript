@@ -1,6 +1,6 @@
-import express from "express"
-import morgan from "morgan"
+import express from 'express'
 import 'express-async-errors'
+import morgan from 'morgan'
 import mysql from 'mysql2/promise'
 
 const EMPTY = 0
@@ -23,28 +23,28 @@ const PORT = 3000
 const app = express()
 
 app.use(morgan('dev'))
-app.use(express.static('static', {extensions: ['html'] }))
+app.use(express.static('static', { extensions: ['html'] }))
 app.use(express.json())
 
-app.get('/api/hello', async (req, res) =>  {
+app.get('/api/hello', async (req, res) => {
   res.json({
-    message: 'Hello Express!'
+    message: 'Hello Express!!!'
   })
 })
 
 app.get('/api/error', async (req, res) => {
-  throw new Error('throw endpoint')
+  throw new Error('Error endpoint')
 })
 
 app.post('/api/games', async (req, res) => {
   const now = new Date()
-  
+
   const conn = await connectMySQL()
   try {
     await conn.beginTransaction()
 
     const gameInsertResult = await conn.execute<mysql.ResultSetHeader>(
-      'insert into games (started_at) values (?)', 
+      'insert into games (started_at) values (?)',
       [now]
     )
     const gameId = gameInsertResult[0].insertId
@@ -60,23 +60,23 @@ app.post('/api/games', async (req, res) => {
       0
     )
 
-    const squaresInsertSql = 
+    const squaresInsertSql =
       'insert into squares (turn_id, x, y, disc) values ' +
       Array.from(Array(squareCount))
         .map(() => '(?, ?, ?, ?)')
         .join(', ')
 
-    const squareInsertValues: any[] = []
+    const squaresInsertValues: any[] = []
     INITIAL_BOARD.forEach((line, y) => {
       line.forEach((disc, x) => {
-        squareInsertValues.push(turnId)
-        squareInsertValues.push(x)
-        squareInsertValues.push(y)
-        squareInsertValues.push(disc)
+        squaresInsertValues.push(turnId)
+        squaresInsertValues.push(x)
+        squaresInsertValues.push(y)
+        squaresInsertValues.push(disc)
       })
     })
 
-    await conn.execute(squaresInsertSql, squareInsertValues)
+    await conn.execute(squaresInsertSql, squaresInsertValues)
 
     await conn.commit()
   } finally {
@@ -86,12 +86,12 @@ app.post('/api/games', async (req, res) => {
   res.status(201).end()
 })
 
-app.get('/api/games/latest/turns/:turnsCount', async (req, res) => {
-  const turnCount = parseInt(req.params.turnsCount)
+app.get('/api/games/latest/turns/:turnCount', async (req, res) => {
+  const turnCount = parseInt(req.params.turnCount)
 
   const conn = await connectMySQL()
   try {
-    const gameSelectResult = await conn.execute<mysql.RowDataPacket[]> (
+    const gameSelectResult = await conn.execute<mysql.RowDataPacket[]>(
       'select id, started_at from games order by id desc limit 1'
     )
     const game = gameSelectResult[0][0]
@@ -103,7 +103,7 @@ app.get('/api/games/latest/turns/:turnsCount', async (req, res) => {
     const turn = turnSelectResult[0][0]
 
     const squaresSelectResult = await conn.execute<mysql.RowDataPacket[]>(
-      'select id, turn_id, x, y, disc from squares where turn_id = ?',
+      `select id, turn_id, x, y, disc from squares where turn_id = ?`,
       [turn['id']]
     )
     const squares = squaresSelectResult[0]
@@ -116,7 +116,7 @@ app.get('/api/games/latest/turns/:turnsCount', async (req, res) => {
       turnCount,
       board,
       nextDisc: turn['next_disc'],
-      // TODO 決着がついている場合、game_resultsテーブルから取得する
+      // TODO 決着がついている場合、game_results テーブルから取得する
       winnerDisc: null
     }
     res.json(responseBody)
@@ -130,11 +130,13 @@ app.post('/api/games/latest/turns', async (req, res) => {
   const disc = parseInt(req.body.move.disc)
   const x = parseInt(req.body.move.x)
   const y = parseInt(req.body.move.y)
-  
-  // 1つ前のターンを取得する
+
   const conn = await connectMySQL()
   try {
-    const gameSelectResult = await conn.execute<mysql.RowDataPacket[]> (
+    await conn.beginTransaction()
+
+    // 1つ前のターンを取得する
+    const gameSelectResult = await conn.execute<mysql.RowDataPacket[]>(
       'select id, started_at from games order by id desc limit 1'
     )
     const game = gameSelectResult[0][0]
@@ -147,7 +149,7 @@ app.post('/api/games/latest/turns', async (req, res) => {
     const turn = turnSelectResult[0][0]
 
     const squaresSelectResult = await conn.execute<mysql.RowDataPacket[]>(
-      'select id, turn_id, x, y, disc from squares where turn_id = ?',
+      `select id, turn_id, x, y, disc from squares where turn_id = ?`,
       [turn['id']]
     )
     const squares = squaresSelectResult[0]
@@ -156,60 +158,53 @@ app.post('/api/games/latest/turns', async (req, res) => {
       board[s.y][s.x] = s.disc
     })
 
-    // 盤面に置けるかチェック
+    // TODO 盤面に置けるかチェック
 
     // 石を置く
     board[y][x] = disc
-    console.log(board)
 
-    // ひっくり返す
+    // TODO ひっくり返す
 
     // ターンを保存する
     const nextDisc = disc === DARK ? LIGHT : DARK
     const now = new Date()
     const turnInsertResult = await conn.execute<mysql.ResultSetHeader>(
       'insert into turns (game_id, turn_count, next_disc, end_at) values (?, ?, ?, ?)',
-      [game['id'], turnCount, DARK, now]
+      [game['id'], turnCount, nextDisc, now]
     )
     const turnId = turnInsertResult[0].insertId
 
-    const squareCount = board.map((line) => line.length).reduce(
-      (v1, v2) => v1 + v2,
-      0
-    )
+    const squareCount = board
+      .map((line) => line.length)
+      .reduce((v1, v2) => v1 + v2, 0)
 
-    const squaresInsertSql = 
+    const squaresInsertSql =
       'insert into squares (turn_id, x, y, disc) values ' +
       Array.from(Array(squareCount))
         .map(() => '(?, ?, ?, ?)')
         .join(', ')
 
-    const squareInsertValues: any[] = []
+    const squaresInsertValues: any[] = []
     board.forEach((line, y) => {
       line.forEach((disc, x) => {
-        squareInsertValues.push(turnId)
-        squareInsertValues.push(x)
-        squareInsertValues.push(y)
-        squareInsertValues.push(disc)
+        squaresInsertValues.push(turnId)
+        squaresInsertValues.push(x)
+        squaresInsertValues.push(y)
+        squaresInsertValues.push(disc)
       })
     })
 
-    await conn.execute(squaresInsertSql, squareInsertValues)
+    await conn.execute(squaresInsertSql, squaresInsertValues)
 
-    await conn.execute('insert into moves (turn_id, disc, x, y) values (?, ?, ?, ?)',
-    [turnId, disc, x, y]    
+    await conn.execute(
+      'insert into moves (turn_id, disc, x, y) values (?, ?, ?, ?)',
+      [turnId, disc, x, y]
     )
 
     await conn.commit()
-
-    
   } finally {
     await conn.end()
   }
-
-  
-
-
 
   res.status(201).end()
 })
@@ -220,10 +215,15 @@ app.listen(PORT, () => {
   console.log(`Reversi application started: http://localhost:${PORT}`)
 })
 
-function errorHandler(err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) {
-  console.error('Unexpected error occured', err)
+function errorHandler(
+  err: any,
+  _req: express.Request,
+  res: express.Response,
+  _next: express.NextFunction
+) {
+  console.error('Unexpected error occurred', err)
   res.status(500).send({
-    message: 'Unexpected error occured'
+    message: 'Unexpected error occurred'
   })
 }
 
